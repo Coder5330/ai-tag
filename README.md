@@ -24,6 +24,21 @@ however heavy an update gets. Expect Kai to be catching Albert reliably after ab
 40 updates (~45 seconds), with Albert's counterplay developing over the next few
 minutes.
 
+## Deploy it
+
+It's a static site with no build step, so either host works and both are configured:
+
+```sh
+npx vercel deploy --prod        # uses vercel.json
+```
+
+For Render, point a new Blueprint at the repo and it picks up `render.yaml`
+(static site, no build command, publish path `.`).
+
+Nothing server-side is involved — all the training happens in the visitor's browser,
+so the deployment is just files on a CDN. No cross-origin isolation headers are needed
+either; the Web Worker doesn't use `SharedArrayBuffer`.
+
 ## What's actually happening
 
 **The room is 3D.** Both agents move on the floor, jump under gravity, stand on

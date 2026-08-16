@@ -1,0 +1,11 @@
+# Render Blueprint. Static site: nothing to build, the repo root is the site.
+services:
+  - type: web
+    name: ai-tag
+    runtime: static
+    buildCommand: ''
+    staticPublishPath: .
+    headers:
+      - path: /src/*
+        name: Content-Type
+        value: text/javascript; charset=utf-8
