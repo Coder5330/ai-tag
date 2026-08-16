@@ -26,7 +26,13 @@ export const DEFAULTS = {
   entDecayUpdates: 400,
   maxGradNorm: 0.5,
   poolSize: 10,
-  swapEvery: 8, // updates between trainee swaps
+  // Half the pool holds the most recent snapshots, half holds a uniform
+  // sample of the whole run. Recent-only pools go unbeatable once one side
+  // solves the game, and the loser stops getting any gradient at all.
+  leaguePool: true,
+  // Updates each role trains before handing over. An array is [runner, tagger]
+  // so the harder role can be given more time.
+  swapEvery: 8,
   snapshotEvery: 4, // updates between pushing a frozen copy into the pool
   roomIndex: 0,
   shaping: 0.02,
@@ -83,6 +89,8 @@ export class SelfPlayTrainer {
     }
 
     this.trainee = TAGGER; // Kai gets the first turn, as in the video
+    this.sinceSwap = 0;
+    this.snapCount = [0, 0];
     this.updates = 0;
     this.envSteps = 0;
     this.frames = 0;
@@ -347,17 +355,46 @@ export class SelfPlayTrainer {
     this.updates++;
 
     if (this.updates % this.cfg.snapshotEvery === 0) this._snapshot(trainee);
-    if (this.updates % this.cfg.swapEvery === 0) this.trainee = 1 - this.trainee;
+    this.sinceSwap++;
+    const cfg = this.cfg;
+    const need = Array.isArray(cfg.swapEvery) ? cfg.swapEvery[this.trainee] : cfg.swapEvery;
+    if (this.sinceSwap >= need) {
+      this.trainee = 1 - this.trainee;
+      this.sinceSwap = 0;
+    }
 
     return { ...this.stats(), ...losses, trainedRole: trainee };
   }
 
   _snapshot(role) {
     const pool = this.pool[role];
-    // Rotate: oldest entry is recycled to hold the newest weights.
-    const b = pool.shift();
-    this.brains[role].cloneInto(b);
-    pool.push(b);
+    const n = ++this.snapCount[role];
+
+    if (!this.cfg.leaguePool) {
+      // Rotate: oldest entry is recycled to hold the newest weights.
+      const b = pool.shift();
+      this.brains[role].cloneInto(b);
+      pool.push(b);
+      return;
+    }
+
+    // Slots [0, half) are a FIFO of recent snapshots; slots [half, size) hold a
+    // reservoir sample over every snapshot ever taken, so early, beatable
+    // opponents stay in circulation and the trainee keeps seeing rounds it can
+    // actually win. Without that the loser's advantages go flat and it stops
+    // learning entirely.
+    const half = Math.max(1, Math.floor(pool.length / 2));
+    const recent = pool.shift();
+    this.brains[role].cloneInto(recent);
+    pool.splice(half - 1, 0, recent);
+
+    const histSlots = pool.length - half;
+    if (histSlots <= 0) return;
+    if (n <= histSlots) {
+      this.brains[role].cloneInto(pool[half + n - 1]);
+    } else if (this.rng.next() < histSlots / n) {
+      this.brains[role].cloneInto(pool[half + this.rng.int(histSlots)]);
+    }
   }
 
   stats() {

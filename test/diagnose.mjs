@@ -45,11 +45,15 @@ if (flags['no-jump']) {
   SPECS[TAGGER].jumpV = 0;
 }
 
-const trainer = new SelfPlayTrainer({ roomIndex: ROOM });
+const trainerOpts = { roomIndex: ROOM };
+if (flags['no-league']) trainerOpts.leaguePool = false;
+if (flags['swap']) trainerOpts.swapEvery = flags['swap'].split(',').map(Number);
+const trainer = new SelfPlayTrainer(trainerOpts);
 const label =
   `${NAME}  [Kai ${SPECS[TAGGER].maxSpeed}u/s turn${SPECS[TAGGER].turnRate}` +
   ` (radius ${(SPECS[TAGGER].maxSpeed / SPECS[TAGGER].turnRate).toFixed(1)}u)` +
-  ` · tagDist ${TAG.dist} · jumpCd ${SPECS[RUNNER].jumpCd}s · round ${ROUND_S}s · room ${ROOM}]`;
+  ` · tagDist ${TAG.dist} · league ${trainerOpts.leaguePool !== false}` +
+  ` · swap ${JSON.stringify(trainerOpts.swapEvery ?? 8)} · room ${ROOM}]`;
 
 for (let u = 0; u < UPDATES; u++) trainer.runUpdate();
 
