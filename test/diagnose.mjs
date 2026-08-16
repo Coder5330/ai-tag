@@ -10,6 +10,7 @@ import { RNG } from '../src/rng.js';
 import {
   TagEnv,
   SPECS,
+  TAG,
   OBS_DIM,
   RUNNER,
   TAGGER,
@@ -34,6 +35,10 @@ if (flags['tagger-speed']) SPECS[TAGGER].maxSpeed = Number(flags['tagger-speed']
 if (flags['runner-jump']) SPECS[RUNNER].jumpV = Number(flags['runner-jump']);
 if (flags['tagger-jump']) SPECS[TAGGER].jumpV = Number(flags['tagger-jump']);
 if (flags['runner-air']) SPECS[RUNNER].air = Number(flags['runner-air']);
+if (flags['tagger-turn']) SPECS[TAGGER].turnRate = Number(flags['tagger-turn']);
+if (flags['runner-turn']) SPECS[RUNNER].turnRate = Number(flags['runner-turn']);
+if (flags['jump-cd']) SPECS[RUNNER].jumpCd = SPECS[TAGGER].jumpCd = Number(flags['jump-cd']);
+if (flags['tag-dist']) TAG.dist = Number(flags['tag-dist']);
 if (flags['no-jump']) {
   // Disable jumping outright by making the impulse a no-op.
   SPECS[RUNNER].jumpV = 0;
@@ -42,8 +47,9 @@ if (flags['no-jump']) {
 
 const trainer = new SelfPlayTrainer({ roomIndex: ROOM });
 const label =
-  `${NAME}  [tagger ${SPECS[TAGGER].maxSpeed}u/s · jump R${SPECS[RUNNER].jumpV}` +
-  `/K${SPECS[TAGGER].jumpV} · air ${SPECS[RUNNER].air} · round ${ROUND_S}s · room ${ROOM}]`;
+  `${NAME}  [Kai ${SPECS[TAGGER].maxSpeed}u/s turn${SPECS[TAGGER].turnRate}` +
+  ` (radius ${(SPECS[TAGGER].maxSpeed / SPECS[TAGGER].turnRate).toFixed(1)}u)` +
+  ` · tagDist ${TAG.dist} · jumpCd ${SPECS[RUNNER].jumpCd}s · round ${ROUND_S}s · room ${ROOM}]`;
 
 for (let u = 0; u < UPDATES; u++) trainer.runUpdate();
 

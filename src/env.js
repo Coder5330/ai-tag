@@ -30,9 +30,12 @@ export const AGENT_R = 1.6; // collision radius in xy
 export const AGENT_H = 3.4; // body height
 
 export const GRAVITY = 34;
-// Per-role jump/air handling lives in SPECS below. Kept as the runner's value
-// so existing references (observation scaling, tests) stay meaningful.
+// Per-role jump/air handling lives in SPECS below. JUMP_V stays a fixed
+// reference scale for normalising vertical speed in observations: tying that
+// to a per-role tunable makes the input mean different things for the two
+// agents, and divides by zero outright if a role has jumping disabled.
 export const JUMP_V = 17.5;
+export const VZ_SCALE = JUMP_V;
 
 export const GRAB_REACH = 5.0;
 export const GRAB_ARC = Math.cos(1.0); // ±~57° in front
@@ -52,9 +55,18 @@ export const MAX_DECISIONS = EPISODE_FRAMES / FRAME_SKIP;
 // That asymmetry is what makes juking a winning strategy instead of a tie.
 export const SPECS = [
   // jumpV: apex = jumpV^2 / (2*GRAVITY). air: how much steering survives a jump.
-  { maxSpeed: 12.5, turnRate: 5.8, accel: 9.0, jumpV: 17.5, air: 0.35 }, // runner
-  { maxSpeed: 13.6, turnRate: 3.8, accel: 9.0, jumpV: 17.5, air: 0.35 }, // tagger
+  // jumpCd: seconds before another jump is allowed, which stops bunny-hopping
+  // from being a free action.
+  // Turn radius = maxSpeed / turnRate, and that is the number that decides
+  // whether juking works: the evader can only cut inside the pursuer if the
+  // pursuer's turn radius is meaningfully wider than the tag radius.
+  { maxSpeed: 12.5, turnRate: 5.8, accel: 9.0, jumpV: 17.5, air: 0.35, jumpCd: 0 }, // runner
+  { maxSpeed: 13.6, turnRate: 3.8, accel: 9.0, jumpV: 17.5, air: 0.35, jumpCd: 0 }, // tagger
 ];
+
+// Mutable so experiments can vary it; `dist` is how close the two bodies must
+// be for a tag to land.
+export const TAG = { dist: AGENT_R * 2 };
 
 export const ALIVE_BONUS = 0.001; // per physics frame, per the video's reward fn
 export const FIRST_GRAB_BONUS = 1; // one-off, so the runner discovers the crates
@@ -148,6 +160,7 @@ export class Agent {
     this.vy = 0;
     this.vz = 0;
     this.grounded = true;
+    this.jumpTimer = 0; // seconds left before another jump is allowed
     this.held = -1; // index of the crate being carried, or -1
     this.act = [0, 0, 0, 0];
     this.rays = new Float32Array(N_RAYS * 2); // [dist, kind] per ray, for drawing
@@ -230,6 +243,7 @@ export class TagEnv {
       a.vx = a.vy = a.vz = 0;
       a.z = 0;
       a.grounded = true;
+      a.jumpTimer = 0;
       a.held = -1;
       a.act = [0, 0, 0, 0];
     }
@@ -307,7 +321,7 @@ export class TagEnv {
   _touching(a, b) {
     const dx = b.x - a.x;
     const dy = b.y - a.y;
-    if (dx * dx + dy * dy > (AGENT_R * 2) ** 2) return false;
+    if (dx * dx + dy * dy > TAG.dist * TAG.dist) return false;
     return a.z < b.top && b.z < a.top;
   }
 
@@ -359,9 +373,11 @@ export class TagEnv {
     a.vx += (tx - a.vx) * k;
     a.vy += (ty - a.vy) * k;
 
-    if (act[2] === 1 && a.grounded) {
+    if (a.jumpTimer > 0) a.jumpTimer -= DT;
+    if (act[2] === 1 && a.grounded && a.jumpTimer <= 0) {
       a.vz = spec.jumpV;
       a.grounded = false;
+      a.jumpTimer = spec.jumpCd;
     }
     a.vz -= GRAVITY * DT;
 
@@ -656,8 +672,8 @@ export class TagEnv {
     out[o++] = s;
     out[o++] = (a.vx * c + a.vy * s) / ms;
     out[o++] = (-a.vx * s + a.vy * c) / ms;
-    out[o++] = a.vz / a.spec.jumpV;
-    out[o++] = a.grounded ? 1 : 0;
+    out[o++] = a.vz / VZ_SCALE;
+    out[o++] = a.grounded && a.jumpTimer <= 0 ? 1 : 0; // jump available
     out[o++] = a.held >= 0 ? 1 : 0;
 
     // --- opponent (12)
@@ -674,7 +690,7 @@ export class TagEnv {
     out[o++] = Math.sin(dth);
     out[o++] = (b.vx * c + b.vy * s) / b.spec.maxSpeed;
     out[o++] = (-b.vx * s + b.vy * c) / b.spec.maxSpeed;
-    out[o++] = b.vz / b.spec.jumpV;
+    out[o++] = b.vz / VZ_SCALE;
     out[o++] = b.grounded ? 1 : 0;
     out[o++] = b.held >= 0 ? 1 : 0;
 

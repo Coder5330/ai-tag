@@ -16,6 +16,7 @@ import {
   JUMP_V,
   GRAVITY,
   FRAME_SKIP,
+  SPECS,
 } from '../src/env.js';
 
 let passed = 0;
@@ -202,6 +203,30 @@ check('agents stay inside the room', () => {
       assert.ok(c.z >= 0, 'crate fell through the floor');
     }
     if (e.frame >= 600) e.reset();
+  }
+});
+
+check('observations survive a role with jumping disabled', () => {
+  // Regression: vertical speed used to be normalised by the per-role jump
+  // impulse, so jumpV = 0 produced 0/0 and silently NaN-poisoned the network.
+  const saved = SPECS.map((s) => s.jumpV);
+  SPECS[RUNNER].jumpV = 0;
+  SPECS[TAGGER].jumpV = 0;
+  try {
+    const e = env(0);
+    const obs = new Float32Array(1024);
+    for (let i = 0; i < 40; i++) {
+      e.step([FWD_JUMP, FWD_JUMP]);
+      for (const role of [RUNNER, TAGGER]) {
+        const n = e.observe(role, obs, 0);
+        for (let j = 0; j < n; j++) {
+          assert.ok(Number.isFinite(obs[j]), `obs[${j}] not finite with jumpV=0`);
+        }
+      }
+    }
+  } finally {
+    SPECS[RUNNER].jumpV = saved[RUNNER];
+    SPECS[TAGGER].jumpV = saved[TAGGER];
   }
 });
 
