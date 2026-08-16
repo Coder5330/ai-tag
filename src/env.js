@@ -30,8 +30,9 @@ export const AGENT_R = 1.6; // collision radius in xy
 export const AGENT_H = 3.4; // body height
 
 export const GRAVITY = 34;
-export const JUMP_V = 17.5; // apex ≈ 4.5 units — clears a crate, and clears a rival's head
-export const AIR_CONTROL = 0.35;
+// Per-role jump/air handling lives in SPECS below. Kept as the runner's value
+// so existing references (observation scaling, tests) stay meaningful.
+export const JUMP_V = 17.5;
 
 export const GRAB_REACH = 5.0;
 export const GRAB_ARC = Math.cos(1.0); // ±~57° in front
@@ -50,8 +51,9 @@ export const MAX_DECISIONS = EPISODE_FRAMES / FRAME_SKIP;
 // The tagger is faster in a straight line; the runner turns harder.
 // That asymmetry is what makes juking a winning strategy instead of a tie.
 export const SPECS = [
-  { maxSpeed: 12.5, turnRate: 5.8, accel: 9.0 }, // runner
-  { maxSpeed: 13.6, turnRate: 3.8, accel: 9.0 }, // tagger
+  // jumpV: apex = jumpV^2 / (2*GRAVITY). air: how much steering survives a jump.
+  { maxSpeed: 12.5, turnRate: 5.8, accel: 9.0, jumpV: 17.5, air: 0.35 }, // runner
+  { maxSpeed: 13.6, turnRate: 3.8, accel: 9.0, jumpV: 17.5, air: 0.35 }, // tagger
 ];
 
 export const ALIVE_BONUS = 0.001; // per physics frame, per the video's reward fn
@@ -353,12 +355,12 @@ export class TagEnv {
     const drive = MOVE_INPUT[act[0]];
     const tx = Math.cos(a.th) * drive * spec.maxSpeed;
     const ty = Math.sin(a.th) * drive * spec.maxSpeed;
-    const k = Math.min(1, spec.accel * DT * (a.grounded ? 1 : AIR_CONTROL));
+    const k = Math.min(1, spec.accel * DT * (a.grounded ? 1 : spec.air));
     a.vx += (tx - a.vx) * k;
     a.vy += (ty - a.vy) * k;
 
     if (act[2] === 1 && a.grounded) {
-      a.vz = JUMP_V;
+      a.vz = spec.jumpV;
       a.grounded = false;
     }
     a.vz -= GRAVITY * DT;
@@ -654,7 +656,7 @@ export class TagEnv {
     out[o++] = s;
     out[o++] = (a.vx * c + a.vy * s) / ms;
     out[o++] = (-a.vx * s + a.vy * c) / ms;
-    out[o++] = a.vz / JUMP_V;
+    out[o++] = a.vz / a.spec.jumpV;
     out[o++] = a.grounded ? 1 : 0;
     out[o++] = a.held >= 0 ? 1 : 0;
 
@@ -672,7 +674,7 @@ export class TagEnv {
     out[o++] = Math.sin(dth);
     out[o++] = (b.vx * c + b.vy * s) / b.spec.maxSpeed;
     out[o++] = (-b.vx * s + b.vy * c) / b.spec.maxSpeed;
-    out[o++] = b.vz / JUMP_V;
+    out[o++] = b.vz / b.spec.jumpV;
     out[o++] = b.grounded ? 1 : 0;
     out[o++] = b.held >= 0 ? 1 : 0;
 
