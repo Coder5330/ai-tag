@@ -3,7 +3,7 @@
 
 import { RNG } from './rng.js';
 import { Brain } from './nn.js';
-import { TagEnv, OBS_DIM, BRANCHES, ROOMS, RUNNER, TAGGER } from './env.js';
+import { TagEnv, OBS_DIM, BRANCHES, ROOMS, RUNNER, TAGGER, ARENA_H, AGENT_R, AGENT_H, BOX_HALF } from './env.js';
 import { playStep } from './trainer.js';
 import { ArenaRenderer } from './render.js';
 import { Curve } from './charts.js';
@@ -206,13 +206,37 @@ function updateProbBars() {
 function newEpisode() {
   showcase.reset();
   prevPose = snapshot();
+  prevBoxVy = showcase.boxes.map(() => 0);
+  renderer.resetEffects();
   tagFlash = 0;
   holdTimer = 0;
 }
 
 function snapshot() {
-  return showcase.agents.map((a) => ({ x: a.x, y: a.y, z: a.z, th: a.th }));
+  return showcase.agents.map((a) => ({ x: a.x, y: a.y, z: a.z, th: a.th, vy: a.vy }));
 }
+
+// The wall cancels the inbound velocity on contact, so the approach speed has
+// to be read from the frame before. Read-only: this never touches the sim.
+const SMASH_SPEED = 8;
+function checkWallSmash(before) {
+  if (!before) return;
+  for (let i = 0; i < showcase.agents.length; i++) {
+    const a = showcase.agents[i];
+    if (a.y >= ARENA_H - AGENT_R - 0.02 && before[i].vy > SMASH_SPEED) {
+      renderer.impactAt(a.x, a.z + AGENT_H * 0.8, before[i].vy);
+    }
+  }
+  for (let i = 0; i < showcase.boxes.length; i++) {
+    const c = showcase.boxes[i];
+    const vy = prevBoxVy[i];
+    if (c.y >= ARENA_H - BOX_HALF - 0.02 && vy > SMASH_SPEED) {
+      renderer.impactAt(c.x, c.z + 1.5, vy);
+    }
+  }
+  for (let i = 0; i < showcase.boxes.length; i++) prevBoxVy[i] = showcase.boxes[i].vy;
+}
+let prevBoxVy = [];
 
 let acc = 0;
 let last = performance.now();
@@ -234,6 +258,7 @@ function frame(now) {
       steps++;
       prevPose = snapshot();
       const res = playStep(showcase, brains, obsBuf, rng, greedy);
+      checkWallSmash(prevPose);
       if (res.done) {
         if (res.tagged) {
           score.kai++;
@@ -250,14 +275,21 @@ function frame(now) {
   }
 
   renderer.draw(showcase, prevPose, Math.min(1, acc), {
+    dt,
     showRays,
     tagFlash,
-    scoreText: `escapes ${score.albert} · tags ${score.kai}`,
+    escapes: score.albert,
+    tags: score.kai,
+    round: score.albert + score.kai + 1,
   });
 
   requestAnimationFrame(frame);
 }
 requestAnimationFrame(frame);
+
+// Handle for poking at the running scene from the console, e.g.
+//   __tag.renderer.impactAt(22, 11, 14)   // smash the centre display
+window.__tag = { showcase, brains, renderer };
 
 window.addEventListener('resize', () => {
   tagCurve.draw();

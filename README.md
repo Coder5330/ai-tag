@@ -87,10 +87,28 @@ node test/train.mjs 340 0     # updates, room index (0 open · 1 crates · 2 maz
 
 `KAI vs random Albert` should climb to 100%, and once a competent Kai has been frozen
 as a reference, `ALBERT vs` that fixed chaser should climb from a couple of seconds
-toward the 10s round limit.
+toward the 10s round limit. A 340-update run of room 0 takes about 6½ minutes and
+gives:
+
+```
+  upd | trained | selfplay | KAI vs random Albert | ALBERT vs frozen Kai
+    1 |   Kai   | tag   0% |      tag   2%        |   survive  ——
+   40 |   Kai   | tag  99% |      tag 100%        |   survive 3.70s   <- Kai solved
+  150 |   Kai   | tag 100% |      tag 100%        |   survive 8.18s
+  340 |   Kai   | tag 100% |      tag 100%        |   survive 9.16s   <- Albert caught up
+```
+
+`node test/physics.mjs` checks the rules the agents are meant to exploit — that a jump
+really does clear a rival's head, that a tag needs vertical overlap, that crates can be
+stood on, carried and thrown, and that nothing escapes the room or goes non-finite.
 
 ## Notes
 
+- **The scoreboards break.** Slam into the back wall hard enough — or throw a crate
+  at it — and the nearest display shatters, with glass shards and a camera jolt. It is
+  pure decoration: the effect lives entirely in the renderer, reads the simulation
+  without writing to it, and resets each round, so it can never touch physics or
+  training. `__tag.renderer.impactAt(22, 11, 14)` in the console smashes one on demand.
 - **Save / load brains** writes a JSON file of both networks, so a long run survives a
   reload. Switching rooms keeps the brains and carries on training, the way the
   reference continues on top of previous brains room to room.

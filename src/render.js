@@ -61,6 +61,8 @@ function shade(hex, k) {
   return `rgb(${r},${g},${b})`;
 }
 
+const clamp = (v, lo, hi) => (v < lo ? lo : v > hi ? hi : v);
+
 function lerpAngle(a, b, t) {
   let d = b - a;
   while (d > Math.PI) d -= 2 * Math.PI;
@@ -76,6 +78,16 @@ export class ArenaRenderer {
     this.eye = [ARENA_W / 2, -34, 22];
     this.target = [ARENA_W / 2, 20, 5.5];
     this.fovY = (46 * Math.PI) / 180;
+
+    // Wall-mounted displays. Purely decorative — nothing here is ever read by
+    // the simulation, so smashing one cannot affect physics or training.
+    this.panels = [
+      { id: 'escapes', x0: 3.5, x1: 14.5, z0: 9.4, z1: 13.2, size: 2.6, ink: C.runnerInk },
+      { id: 'tags', x0: 29.5, x1: 40.5, z0: 9.4, z1: 13.2, size: 2.6, ink: C.taggerInk },
+      { id: 'timer', x0: 17.5, x1: 26.5, z0: 10.2, z1: 14.2, size: 2.8, ink: '#f2f5f9' },
+      { id: 'round', x0: 18.5, x1: 25.5, z0: 6.6, z1: 9.4, size: 1.9, ink: '#8d97a8' },
+    ];
+    this.resetEffects();
     this.resize();
   }
 
@@ -98,6 +110,88 @@ export class ArenaRenderer {
     const yA = cross(zA, xA);
     this.basis = { xA, yA, zA };
     this.f = h / 2 / Math.tan(this.fovY / 2);
+  }
+
+  resetEffects() {
+    for (const p of this.panels) {
+      p.broken = false;
+      p.hitX = (p.x0 + p.x1) / 2;
+      p.hitZ = (p.z0 + p.z1) / 2;
+      p.cracks = null;
+    }
+    this.debris = [];
+    this.shake = 0;
+  }
+
+  /**
+   * Something hit the back wall hard at (x, z). Cracks the nearest display and
+   * throws shards. Cosmetic only.
+   */
+  impactAt(x, z, power) {
+    this.shake = Math.min(1.4, this.shake + power * 0.06);
+    let best = null;
+    let bestD = Infinity;
+    for (const p of this.panels) {
+      const cx = (p.x0 + p.x1) / 2;
+      const reach = (p.x1 - p.x0) / 2 + 6;
+      const d = Math.abs(x - cx);
+      if (d < reach && d < bestD) {
+        bestD = d;
+        best = p;
+      }
+    }
+    if (!best || best.broken) return;
+    best.broken = true;
+    best.hitX = clamp(x, best.x0 + 0.6, best.x1 - 0.6);
+    best.hitZ = clamp(z, best.z0 + 0.4, best.z1 - 0.4);
+
+    // Fixed crack rays, generated once so the pattern doesn't crawl per frame.
+    best.cracks = [];
+    const n = 9;
+    for (let i = 0; i < n; i++) {
+      const a = (i / n) * Math.PI * 2 + (i * 2.399) % 1;
+      const len = 1.4 + ((i * 37) % 10) / 10 * 3.2;
+      best.cracks.push([
+        Math.cos(a) * len,
+        Math.sin(a) * len * 0.6,
+        Math.cos(a * 2.1) * len * 0.5,
+        Math.sin(a * 1.7) * len * 0.35,
+      ]);
+    }
+
+    for (let i = 0; i < 16; i++) {
+      const t = i / 16;
+      this.debris.push({
+        x: best.x0 + (best.x1 - best.x0) * ((i * 7) % 16) / 16,
+        y: ARENA_H - 0.5,
+        z: best.z0 + (best.z1 - best.z0) * ((i * 11) % 16) / 16,
+        vx: (t - 0.5) * 9,
+        vy: -(3 + t * 9),
+        vz: 2 + ((i * 13) % 7),
+        size: 0.28 + ((i * 5) % 4) * 0.12,
+        life: 1,
+      });
+    }
+  }
+
+  _updateEffects(dt) {
+    this.shake = Math.max(0, this.shake - dt * 2.4);
+    for (let i = this.debris.length - 1; i >= 0; i--) {
+      const d = this.debris[i];
+      d.vz -= 34 * dt;
+      d.x += d.vx * dt;
+      d.y += d.vy * dt;
+      d.z += d.vz * dt;
+      if (d.z <= 0) {
+        d.z = 0;
+        d.vz *= -0.32;
+        d.vx *= 0.6;
+        d.vy *= 0.6;
+        if (Math.abs(d.vz) < 1) d.vz = 0;
+      }
+      d.life -= dt * 0.32;
+      if (d.life <= 0) this.debris.splice(i, 1);
+    }
   }
 
   /** World point -> { x, y, depth }. depth <= 0 means behind the camera. */
@@ -168,12 +262,20 @@ export class ArenaRenderer {
   draw(env, prev, alpha, opts = {}) {
     this.resize();
     const { ctx, w, h } = this;
+    this._updateEffects(opts.dt || 0.016);
 
     const g = ctx.createLinearGradient(0, 0, 0, h);
     g.addColorStop(0, '#0a0c11');
     g.addColorStop(1, '#14171e');
     ctx.fillStyle = g;
     ctx.fillRect(0, 0, w, h);
+
+    // Background is painted unshaken so the jolt never exposes a bare edge.
+    ctx.save();
+    if (this.shake > 0) {
+      const k = this.shake * this.shake * 9 * this.dpr;
+      ctx.translate(Math.sin(this.shake * 61) * k, Math.cos(this.shake * 47) * k);
+    }
 
     this._walls(env, opts);
     this._floor(env);
@@ -212,6 +314,20 @@ export class ArenaRenderer {
     for (const role of [RUNNER, TAGGER]) {
       this._agentFaces(faces, env.agents[role], this._pose(env, prev, alpha, role), role);
     }
+    for (const d of this.debris) {
+      const r = d.size;
+      const pts = [
+        [d.x - r, d.y, d.z],
+        [d.x + r, d.y, d.z],
+        [d.x + r, d.y, d.z + r * 2],
+        [d.x - r, d.y, d.z + r * 2],
+      ];
+      faces.push({
+        pts,
+        fill: `rgba(196,206,220,${Math.min(1, d.life).toFixed(2)})`,
+        depth: this._depth(pts),
+      });
+    }
     faces.sort((a, b) => b.depth - a.depth);
     for (const f of faces) {
       if (this._poly(f.pts, f.fill, f.stroke, f.lw) && f.after) f.after();
@@ -220,6 +336,7 @@ export class ArenaRenderer {
     for (const role of [RUNNER, TAGGER]) {
       this._nameTag(env.agents[role], this._pose(env, prev, alpha, role), role);
     }
+    ctx.restore();
 
     if (opts.tagFlash > 0) this._flash(opts.tagFlash);
   }
@@ -281,32 +398,54 @@ export class ArenaRenderer {
   /** Scoreboards mounted on the back wall, as in the reference. */
   _displays(env, opts) {
     const H = ARENA_H;
-    const panel = (x0, x1, z0, z1) => {
-      this._poly(
-        [
-          [x0, H - 0.35, z0],
-          [x1, H - 0.35, z0],
-          [x1, H - 0.35, z1],
-          [x0, H - 0.35, z1],
-        ],
-        C.panel,
-        C.panelEdge,
-        1.5,
-      );
+    const left = Math.max(0, (EPISODE_FRAMES - env.frame) / 60);
+    const value = {
+      escapes: String(opts.escapes ?? 0),
+      tags: String(opts.tags ?? 0),
+      timer: left.toFixed(1),
+      round: `#${opts.round ?? 1}`,
     };
 
-    // left: Albert's escapes · right: Kai's tags
-    panel(3.5, 14.5, 9.4, 13.2);
-    this._text([9, H - 0.4, 11.3], String(opts.escapes ?? 0), C.runnerInk, 2.6);
-    panel(29.5, 40.5, 9.4, 13.2);
-    this._text([35, H - 0.4, 11.3], String(opts.tags ?? 0), C.taggerInk, 2.6);
+    for (const p of this.panels) {
+      this._poly(
+        [
+          [p.x0, H - 0.35, p.z0],
+          [p.x1, H - 0.35, p.z0],
+          [p.x1, H - 0.35, p.z1],
+          [p.x0, H - 0.35, p.z1],
+        ],
+        p.broken ? '#07080b' : C.panel,
+        p.broken ? '#4a5160' : C.panelEdge,
+        1.5,
+      );
 
-    // centre: seconds left in the round, and the round number below it
-    panel(17.5, 26.5, 10.2, 14.2);
-    const left = Math.max(0, (EPISODE_FRAMES - env.frame) / 60);
-    this._text([22, H - 0.4, 12.2], left.toFixed(1), '#f2f5f9', 2.8);
-    panel(18.5, 25.5, 6.6, 9.4);
-    this._text([22, H - 0.4, 8], `#${opts.round ?? 1}`, '#8d97a8', 1.9);
+      const cx = (p.x0 + p.x1) / 2;
+      const cz = (p.z0 + p.z1) / 2;
+
+      if (!p.broken) {
+        this._text([cx, H - 0.4, cz], value[p.id], p.ink, p.size);
+        continue;
+      }
+
+      // Dead display: fractured glass and a dim, half-lit readout.
+      for (const [ax, az, bx, bz] of p.cracks) {
+        this._line(
+          [p.hitX, H - 0.4, p.hitZ],
+          [clamp(p.hitX + ax, p.x0, p.x1), H - 0.4, clamp(p.hitZ + az, p.z0, p.z1)],
+          'rgba(214,224,238,0.75)',
+          1.4,
+          0.85,
+        );
+        this._line(
+          [clamp(p.hitX + ax, p.x0, p.x1), H - 0.4, clamp(p.hitZ + az, p.z0, p.z1)],
+          [clamp(p.hitX + ax + bx, p.x0, p.x1), H - 0.4, clamp(p.hitZ + az + bz, p.z0, p.z1)],
+          'rgba(214,224,238,0.45)',
+          1.1,
+          0.7,
+        );
+      }
+      this._text([cx, H - 0.4, cz], value[p.id], 'rgba(120,130,146,0.5)', p.size);
+    }
   }
 
   _floor(env) {
