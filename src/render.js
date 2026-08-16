@@ -76,8 +76,8 @@ export class ArenaRenderer {
     this.ctx = canvas.getContext('2d');
     this.dpr = 1;
     this.eye = [ARENA_W / 2, -34, 22];
-    this.target = [ARENA_W / 2, 20, 5.5];
-    this.fovY = (46 * Math.PI) / 180;
+    this.target = [ARENA_W / 2, 20, 4.8];
+    this.fovY = (42 * Math.PI) / 180;
 
     // Wall-mounted displays. Purely decorative — nothing here is ever read by
     // the simulation, so smashing one cannot affect physics or training.
