@@ -1,0 +1,212 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>AI Tag — Albert &amp; Kai</title>
+    <link rel="stylesheet" href="./styles.css" />
+    <link
+      rel="icon"
+      href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><circle cx='11' cy='16' r='7' fill='%23E86A1C'/><circle cx='23' cy='16' r='7' fill='%232E86E0'/></svg>"
+    />
+  </head>
+  <body>
+    <div id="file-warning" hidden>
+      <strong>This page needs a local web server.</strong>
+      <span>ES modules and Web Workers can't load from <code>file://</code>. Run</span>
+      <code>python3 -m http.server 8000</code>
+      <span>in this folder, then open <code>http://localhost:8000</code>.</span>
+    </div>
+
+    <header>
+      <h1>AI Tag</h1>
+      <p class="sub">
+        Two neural networks learning tag from scratch by deep reinforcement learning &mdash;
+        <span class="dot runner"></span><b class="runner">Albert</b> runs,
+        <span class="dot tagger"></span><b class="tagger">Kai</b> tags. Trained live in your
+        browser with PPO and self&#8209;play.
+      </p>
+    </header>
+
+    <main>
+      <section class="arena-panel">
+        <canvas id="arena" width="1024" height="640"></canvas>
+        <div class="arena-foot">
+          <div class="seg" id="room-buttons" role="group" aria-label="Room"></div>
+          <div class="spacer"></div>
+          <label class="check"
+            ><input type="checkbox" id="show-rays" /> <span>Show what they see</span></label
+          >
+          <label class="check"
+            ><input type="checkbox" id="greedy" /> <span>Best move only</span></label
+          >
+          <label class="speed"
+            >Speed
+            <select id="speed">
+              <option value="0.5">0.5&times;</option>
+              <option value="1" selected>1&times;</option>
+              <option value="2">2&times;</option>
+              <option value="4">4&times;</option>
+            </select>
+          </label>
+        </div>
+      </section>
+
+      <section class="side">
+        <div class="card status-card">
+          <div class="status-row">
+            <div class="training-of">
+              <span class="label">Now training</span>
+              <span class="who" id="trainee">Kai</span>
+            </div>
+            <button id="play" class="primary">Pause training</button>
+          </div>
+          <div class="bar"><div class="bar-fill" id="swap-bar"></div></div>
+          <p class="hint" id="swap-hint">
+            Only one brain trains at a time. The other plays a frozen copy of itself from the
+            recent past.
+          </p>
+        </div>
+
+        <div class="tiles">
+          <div class="tile">
+            <span class="tile-label">Updates</span>
+            <span class="tile-value" id="s-updates">0</span>
+          </div>
+          <div class="tile">
+            <span class="tile-label">Simulated tag</span>
+            <span class="tile-value" id="s-hours">0h</span>
+          </div>
+          <div class="tile">
+            <span class="tile-label">Kai's tag rate</span>
+            <span class="tile-value tagger" id="s-tagrate">&mdash;</span>
+          </div>
+          <div class="tile">
+            <span class="tile-label">Albert survives</span>
+            <span class="tile-value runner" id="s-survival">&mdash;</span>
+          </div>
+        </div>
+
+        <figure class="card chart-card">
+          <figcaption>
+            <span class="chart-title">Kai's tag rate</span>
+            <span class="chart-note">share of rounds ending in a tag</span>
+          </figcaption>
+          <canvas id="chart-tag" height="150"></canvas>
+        </figure>
+
+        <figure class="card chart-card">
+          <figcaption>
+            <span class="chart-title">Albert's survival time</span>
+            <span class="chart-note">seconds before being tagged &middot; 10s = escaped</span>
+          </figcaption>
+          <canvas id="chart-surv" height="150"></canvas>
+        </figure>
+
+        <div class="card brains">
+          <div class="brain" data-role="0">
+            <span class="brain-name runner">Albert</span>
+            <div class="branch">
+              <span class="branch-label">move</span>
+              <div class="probs" id="p-move-0"></div>
+            </div>
+            <div class="branch">
+              <span class="branch-label">turn</span>
+              <div class="probs" id="p-turn-0"></div>
+            </div>
+            <div class="branch">
+              <span class="branch-label">jump</span>
+              <div class="probs" id="p-jump-0"></div>
+            </div>
+            <div class="branch">
+              <span class="branch-label">grab</span>
+              <div class="probs" id="p-grab-0"></div>
+            </div>
+          </div>
+          <div class="brain" data-role="1">
+            <span class="brain-name tagger">Kai</span>
+            <div class="branch">
+              <span class="branch-label">move</span>
+              <div class="probs" id="p-move-1"></div>
+            </div>
+            <div class="branch">
+              <span class="branch-label">turn</span>
+              <div class="probs" id="p-turn-1"></div>
+            </div>
+            <div class="branch">
+              <span class="branch-label">jump</span>
+              <div class="probs" id="p-jump-1"></div>
+            </div>
+            <div class="branch">
+              <span class="branch-label">grab</span>
+              <div class="probs" id="p-grab-1"></div>
+            </div>
+          </div>
+          <p class="hint">
+            Live network output — the four numbers each brain emits every 4 frames:
+            <code>[move, turn, jump, grab]</code>.
+          </p>
+        </div>
+
+        <div class="card actions">
+          <button id="save">Save brains</button>
+          <button id="load">Load brains</button>
+          <button id="reset" class="danger">Start over</button>
+          <input type="file" id="file" accept="application/json" hidden />
+        </div>
+      </section>
+    </main>
+
+    <footer>
+      <details>
+        <summary>How this works</summary>
+        <div class="explain">
+          <p>
+            Each agent has its own 4&#8209;layer network: 99 inputs &rarr; 64 &rarr; 64 &rarr; four
+            action heads and a value estimate. The inputs are its own position, height, heading and
+            velocity, whether it is on the ground and whether it is carrying something, all of the
+            same for its opponent, where the crates are, the time left in the round, its previous
+            action, and 13 raycasts that report the distance to whatever they hit and whether it
+            was a wall, a crate or the other agent.
+          </p>
+          <p>
+            <b>Rewards.</b> When Kai tags Albert, Kai gets <b>+1</b> and Albert gets <b>&minus;1</b>.
+            On top of that Albert earns <b>+0.001</b> every frame he stays alive and Kai pays
+            <b>&minus;0.001</b>, so Kai is pushed to finish quickly rather than stall. A small
+            potential&#8209;based distance term is added to get the first chase started; because it
+            telescopes it cannot change which strategy is optimal, only how fast it is found.
+          </p>
+          <p>
+            <b>Self&#8209;play.</b> Training both brains at once tends to collapse into a single
+            brittle strategy, so only one trains at a time and swaps every few updates. Its
+            opponent is drawn from a pool of the 10 most recent frozen copies, re&#8209;drawn every
+            round, so the trainee has to beat a spread of past strategies instead of overfitting to
+            the newest one.
+          </p>
+          <p>
+            <b>The room is 3D.</b> Both agents jump under gravity, stand on top of the fixed
+            blocks and the loose crates, and can grab a crate to carry, shove or throw it. A tag
+            only counts when the two bodies overlap in height as well as on the floor, so timing a
+            jump over an incoming Kai is a legal escape &mdash; and one Albert has to discover for
+            himself.
+          </p>
+          <p>
+            Kai is faster in a straight line; Albert turns harder. That asymmetry is why the fight
+            is interesting &mdash; Albert's only winning move is to make Kai commit and then cut
+            across him.
+          </p>
+        </div>
+      </details>
+      <p class="credit">
+        Inspired by AI Warehouse's <i>AI Learns to Play Tag</i>. Same recipe &mdash; deep RL,
+        self&#8209;play, raycast vision &mdash; shrunk down so it converges in minutes instead of
+        days.
+      </p>
+    </footer>
+
+    <script>
+      if (location.protocol === 'file:') document.getElementById('file-warning').hidden = false;
+    </script>
+    <script type="module" src="./src/main.js"></script>
+  </body>
+</html>
