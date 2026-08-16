@@ -48,8 +48,14 @@ export const BRANCHES = [3, 3, 2, 2]; // move, turn, jump, grab
 
 export const DT = 1 / 60;
 export const FRAME_SKIP = 4; // one decision every 4 physics frames
-export const EPISODE_FRAMES = 600; // 10 seconds
-export const MAX_DECISIONS = EPISODE_FRAMES / FRAME_SKIP;
+// Round length is the single most important balance number in the game. In a
+// bounded arena a pursuer corners an evader eventually regardless of speeds —
+// a scripted evader escapes 0% of 10s rounds even when it is FASTER than the
+// pursuer — so the clock, not the physics, decides whether evasion can pay.
+export let EPISODE_FRAMES = 360; // 6 seconds
+export function setRoundFrames(n) {
+  EPISODE_FRAMES = n;
+}
 
 // The tagger is faster in a straight line; the runner turns harder.
 // That asymmetry is what makes juking a winning strategy instead of a tie.
@@ -61,7 +67,7 @@ export const SPECS = [
   // whether juking works: the evader can only cut inside the pursuer if the
   // pursuer's turn radius is meaningfully wider than the tag radius.
   { maxSpeed: 12.5, turnRate: 5.8, accel: 9.0, jumpV: 17.5, air: 0.35, jumpCd: 0 }, // runner
-  { maxSpeed: 13.6, turnRate: 3.8, accel: 9.0, jumpV: 17.5, air: 0.35, jumpCd: 0 }, // tagger
+  { maxSpeed: 13.6, turnRate: 2.4, accel: 9.0, jumpV: 17.5, air: 0.35, jumpCd: 0 }, // tagger
 ];
 
 // Mutable so experiments can vary it; `dist` is how close the two bodies must

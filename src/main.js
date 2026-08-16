@@ -3,7 +3,7 @@
 
 import { RNG } from './rng.js';
 import { Brain } from './nn.js';
-import { TagEnv, OBS_DIM, BRANCHES, ROOMS, RUNNER, TAGGER, ARENA_H, AGENT_R, AGENT_H, BOX_HALF } from './env.js';
+import { TagEnv, OBS_DIM, BRANCHES, ROOMS, RUNNER, TAGGER, ARENA_H, AGENT_R, AGENT_H, BOX_HALF, EPISODE_FRAMES } from './env.js';
 import { playStep } from './trainer.js';
 import { ArenaRenderer } from './render.js';
 import { Curve } from './charts.js';
@@ -36,13 +36,15 @@ const tagCurve = new Curve($('chart-tag'), {
   yTicks: [0, 0.5, 1],
   format: (v) => `${Math.round(v * 100)}%`,
 });
+const ROUND_S = EPISODE_FRAMES / 60;
 const survCurve = new Curve($('chart-surv'), {
   color: COLORS[RUNNER],
   yMin: 0,
-  yMax: 10,
-  yTicks: [0, 5, 10],
+  yMax: ROUND_S,
+  yTicks: [0, ROUND_S / 2, ROUND_S],
   format: (v) => `${v.toFixed(1)}s`,
 });
+$('round-len').textContent = `${ROUND_S}s`;
 
 // ---------------------------------------------------------------- controls
 let speed = 1;

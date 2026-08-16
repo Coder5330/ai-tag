@@ -11,6 +11,8 @@ import {
   TagEnv,
   SPECS,
   TAG,
+  EPISODE_FRAMES,
+  setRoundFrames,
   OBS_DIM,
   RUNNER,
   TAGGER,
@@ -27,7 +29,8 @@ for (const a of process.argv.slice(2)) {
 }
 const UPDATES = Number(flags.updates || 240);
 const ROOM = Number(flags.room || 0);
-const ROUND_S = Number(flags.round || 10);
+if (flags.round) setRoundFrames(Math.round(Number(flags.round) * 60));
+const ROUND_S = EPISODE_FRAMES / 60;
 const NAME = flags.name || 'config';
 
 // Agents hold a live reference to their spec, so mutating it retunes the sim.

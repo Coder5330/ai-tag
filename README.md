@@ -47,6 +47,14 @@ two bodies overlap in *height* as well as on the floor, so a well-timed jump ove
 incoming Kai is a legal escape. A crate pushed against a block becomes a step up onto
 it — reachable by jumping from the crate, but not from the floor.
 
+**Rounds are 6 seconds, and that is the most important number in the game.** In a
+closed room a pursuer corners an evader *eventually* whatever the speeds — measured
+with `test/balance.mjs`, a scripted evader escapes 0% of 10-second rounds even when it
+is faster than the pursuer. The clock, not the physics, decides whether running away
+can pay. Albert doesn't have to escape forever, only outlast the buzzer. Kai is faster
+in a straight line but turns in a wide 5.7-unit arc against Albert's 2.2-unit one, so
+Albert's win condition is to bait a commitment and cut across it.
+
 **The brains.** Each agent owns a 4-layer network: 99 inputs → 64 → 64 → four action
 heads plus a value estimate (~11k parameters). Inputs are its own position, height,
 heading, velocity, grounded and carrying flags; all of the same for its opponent;
@@ -89,6 +97,10 @@ him.
 | `src/charts.js` | training curves |
 | `src/main.js` | live showcase match + UI |
 | `test/train.mjs` | headless training harness (Node) |
+| `test/physics.mjs` | contract checks for the rules the agents exploit |
+| `test/balance.mjs` | scripted-vs-scripted physics check — no learning involved |
+| `test/oracle.mjs` | is the arena survivable at all? learned policy vs a scripted evader |
+| `test/diagnose.mjs` | trains a pair, then measures how they actually play |
 
 ## Checking it learns
 
@@ -102,8 +114,7 @@ node test/train.mjs 340 0     # updates, room index (0 open · 1 crates · 2 maz
 
 `KAI vs random Albert` should climb to 100%, and once a competent Kai has been frozen
 as a reference, `ALBERT vs` that fixed chaser should climb from a couple of seconds
-toward the 10s round limit. A 340-update run of room 0 takes about 6½ minutes and
-gives:
+toward the round limit. A 340-update run of room 0 takes about 6½ minutes and gives:
 
 ```
   upd | trained | selfplay | KAI vs random Albert | ALBERT vs frozen Kai
@@ -116,6 +127,25 @@ gives:
 `node test/physics.mjs` checks the rules the agents are meant to exploit — that a jump
 really does clear a rival's head, that a tag needs vertical overlap, that crates can be
 stood on, carried and thrown, and that nothing escapes the room or goes non-finite.
+
+### Balancing it
+
+Two tools exist because "the runner always loses" has two very different causes and
+they need opposite fixes:
+
+- `node test/balance.mjs` runs a scripted evader against a scripted pursuer with no
+  networks at all, so the survival time it reports is a property of the arena alone.
+  Use it to pick physics — it runs in seconds instead of the six minutes a training
+  run costs.
+- `node test/oracle.mjs` trains a pair and then swaps the runner for that same scripted
+  evader. If the script vastly outperforms the learned policy, the arena is fine and
+  the learning is at fault; if both lose equally, the arena is unwinnable and no amount
+  of tuning will help.
+
+That distinction matters. Ten trained configurations — turn radius, tag radius, jump
+height, air control, jump cooldown, tagger speed, opponent-pool shape — all produced
+the same ~3s survival and a 99–100% tag rate, because every one of them was tuning the
+wrong layer.
 
 ## Notes
 

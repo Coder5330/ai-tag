@@ -98,7 +98,7 @@
         <figure class="card chart-card">
           <figcaption>
             <span class="chart-title">Albert's survival time</span>
-            <span class="chart-note">seconds before being tagged &middot; 10s = escaped</span>
+            <span class="chart-note">seconds before being tagged &middot; <span id="round-len">6s</span> = escaped</span>
           </figcaption>
           <canvas id="chart-surv" height="150"></canvas>
         </figure>
@@ -192,9 +192,16 @@
             shatter; that part is purely for show and never touches the simulation.
           </p>
           <p>
-            Kai is faster in a straight line; Albert turns harder. That asymmetry is why the fight
-            is interesting &mdash; Albert's only winning move is to make Kai commit and then cut
-            across him.
+            Kai is faster in a straight line but turns in a wide 5.7&#8209;unit arc; Albert is
+            slower and turns on a 2.2&#8209;unit one. So Albert's winning move is to make Kai commit
+            and then cut across him while he is still swinging around.
+          </p>
+          <p>
+            <b>Why rounds are short.</b> In a closed room a pursuer corners an evader eventually
+            whatever the speeds &mdash; a scripted evader escapes 0% of 10&#8209;second rounds even
+            when it is <i>faster</i> than the pursuer. The clock, not the physics, is what decides
+            whether running away can ever pay, so a round lasts 6 seconds. Albert doesn't have to
+            escape forever, just outlast the buzzer.
           </p>
         </div>
       </details>
