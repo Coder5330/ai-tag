@@ -177,8 +177,17 @@
             telescopes it cannot change which strategy is optimal, only how fast it is found.
           </p>
           <p>
+            <b>Whoever is losing gets trained.</b> Chasing is far easier to learn than evading, so
+            on a fixed schedule Kai compounds a lead until Albert has no winnable rounds left, his
+            advantages go flat, and he stops learning altogether &mdash; measured, Albert decays
+            from 58% escapes to 0% over a few hundred updates. So the trainer checks the real
+            head&#8209;to&#8209;head score every few updates and hands the training turn to whichever
+            agent is behind. Albert also starts from a supervised copy of a hand&#8209;written
+            evader, because PPO reliably fails to rediscover plain fleeing on its own.
+          </p>
+          <p>
             <b>Self&#8209;play.</b> Training both brains at once tends to collapse into a single
-            brittle strategy, so only one trains at a time and swaps every few updates. Its
+            brittle strategy, so only one trains at a time. Its
             opponent is drawn from a pool of the 10 most recent frozen copies, re&#8209;drawn every
             round, so the trainee has to beat a spread of past strategies instead of overfitting to
             the newest one.

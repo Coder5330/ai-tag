@@ -70,11 +70,38 @@ never discovered, the same trick the reference uses. A small potential-based dis
 term gets the very first chase started; because it telescopes it provably cannot
 change which policy is optimal (Ng et al., 1999), only how quickly it is found.
 
-**Self-play.** Training both brains at once collapses into one brittle strategy, so
-only one trains at a time and the trainee swaps every 8 updates. Its opponent is drawn
-from a pool of the 10 most recent frozen snapshots, re-drawn on every reset, so the
-trainee has to beat a spread of past strategies instead of overfitting to the newest
-one.
+**Self-play, with the losing agent given the training turn.** Only one brain trains at
+a time; its opponent is drawn from a league pool — half recent snapshots, half a
+reservoir sample of the whole run — so it must beat a spread of strategies rather than
+just the newest.
+
+But a *fixed* alternation schedule does not work here, and the reason is the single
+most interesting thing this project turned up. Chasing is far easier to learn than
+evading, so the tagger compounds a lead until the runner has no winnable rounds left.
+At that point every action the runner takes is equally doomed, its advantages go flat,
+and it stops learning altogether. Warm-started from the scripted evader it begins at
+58% escapes and decays to 0% over 480 updates:
+
+```
+fixed schedule:   58% -> 35% -> 15% -> 23% -> 10% -> 3% -> 3% -> 0%
+losing-side turn: 52% -> 33% -> 37% -> 32% -> 55% -> 22% -> 20% -> 35%
+```
+
+So the trainer measures the real head-to-head score every few updates and hands the
+training turn to whichever agent is behind, holding it there until the match returns
+near even. That removes the collapse entirely — the runner holds 20-55% indefinitely
+across seeds instead of decaying to nothing.
+
+That measurement is deliberately separate from the training histogram. The histogram
+scores the trainee against the league pool and can read 60% while the newest-vs-newest
+match reads 3%; balancing against it would optimise a number nobody ever sees. It is
+also why the tag rate shown in the UI is the head-to-head one.
+
+**The runner is warm-started.** PPO reliably fails to rediscover plain fleeing: against
+the same trained tagger, the scripted evader in `test/balance.mjs` escapes 73% of
+rounds where a from-scratch policy manages 27%. So the runner is first cloned from that
+script by supervised cross-entropy and PPO refines from there. Without it the opening
+minutes are a walkover — 10% escapes at update 60, against 52% with it.
 
 **The algorithm** is PPO — clipped surrogate objective, GAE(λ), entropy bonus decayed
 over training, Adam, global gradient-norm clipping — written out longhand in
@@ -145,7 +172,13 @@ they need opposite fixes:
 That distinction matters. Ten trained configurations — turn radius, tag radius, jump
 height, air control, jump cooldown, tagger speed, opponent-pool shape — all produced
 the same ~3s survival and a 99–100% tag rate, because every one of them was tuning the
-wrong layer.
+wrong layer. Two things actually moved it: the round length (a bounded arena makes long
+rounds unwinnable for an evader at any speed) and giving the training turn to whichever
+agent is losing.
+
+A warning learned the hard way: measure the head-to-head, not the training histogram.
+Several apparent fixes here were the runner beating stale snapshots in its own opponent
+pool.
 
 ## Notes
 

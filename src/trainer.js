@@ -37,8 +37,9 @@ export const DEFAULTS = {
   roomIndex: 0,
   shaping: 0.02,
   shapingRunner: 1,
-  // Supervised warm start for the runner before self-play begins.
-  warmStart: 0,
+  // Supervised warm start for the runner before self-play begins. Without it
+  // the first minute is a walkover (10% escapes at update 60 against 52%).
+  warmStart: 1,
   // Give the training turn to whichever side is currently losing, instead of
   // alternating on a fixed schedule. Chasing is the easier job to learn, so
   // fixed alternation lets the tagger compound a lead until the runner has no
@@ -466,7 +467,8 @@ export class SelfPlayTrainer {
       envSteps: this.envSteps,
       frames: this.frames,
       episodes: this.hist.length,
-      tagRate: tags / n,
+      tagRate: this.h2hTagRate ?? tags / n,
+      poolTagRate: tags / n,
       meanSurvival: frames / n / 60, // seconds
       trainee: this.trainee,
       h2hTagRate: this.h2hTagRate,

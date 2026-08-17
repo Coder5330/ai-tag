@@ -133,6 +133,8 @@ function applyStats(s) {
   $('s-updates').textContent = s.updates.toLocaleString();
   $('s-hours').textContent = formatSimTime(s.frames / 60);
   if (s.episodes > 20) {
+    // s.tagRate is the newest-vs-newest rate — the match on screen — not the
+    // trainee-vs-pool figure, which can differ by 50 points.
     $('s-tagrate').textContent = `${Math.round(s.tagRate * 100)}%`;
     $('s-survival').textContent = `${s.meanSurvival.toFixed(1)}s`;
     if (typeof s.entropy === 'number') {
