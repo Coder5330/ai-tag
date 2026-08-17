@@ -49,6 +49,7 @@ if (flags['no-jump']) {
 }
 
 const trainerOpts = { roomIndex: ROOM };
+if (flags.seed) trainerOpts.seed = Number(flags.seed);
 if (flags['no-league']) trainerOpts.leaguePool = false;
 if (flags['shaping-runner']) trainerOpts.shapingRunner = Number(flags['shaping-runner']);
 if (flags['swap']) trainerOpts.swapEvery = flags['swap'].split(',').map(Number);
@@ -59,7 +60,15 @@ const label =
   ` · tagDist ${TAG.dist} · league ${trainerOpts.leaguePool !== false}` +
   ` · swap ${JSON.stringify(trainerOpts.swapEvery ?? 8)} · room ${ROOM}]`;
 
-for (let u = 0; u < UPDATES; u++) trainer.runUpdate();
+const track = [];
+for (let u = 1; u <= UPDATES; u++) {
+  trainer.runUpdate();
+  if (u % 120 === 0) {
+    const h = trainer.hist.slice(-300);
+    const esc = h.filter((e) => !e.tagged).length / Math.max(1, h.length);
+    track.push(`u${u}:${(esc * 100).toFixed(0)}%`);
+  }
+}
 
 // ---- watch the trained pair play, and count what Albert actually does
 const EPISODES = 300;
@@ -119,6 +128,7 @@ for (let e = 0; e < EPISODES; e++) {
 const pct = (a, b) => `${((100 * a) / Math.max(1, b)).toFixed(1)}%`;
 
 console.log(`\n=== ${label} · ${UPDATES} updates ===`);
+console.log(`  escapes over training   ${track.join('  ')}`);
 console.log(`  tag rate                ${pct(tags, EPISODES)}   (50% = even fight)`);
 console.log(`  Albert escapes          ${pct(EPISODES - tags, EPISODES)}`);
 console.log(`  mean survival           ${(frames / EPISODES / 60).toFixed(2)}s of ${ROUND_S}s`);
