@@ -51,6 +51,7 @@ if (flags['no-jump']) {
 const trainerOpts = { roomIndex: ROOM };
 if (flags.seed) trainerOpts.seed = Number(flags.seed);
 if (flags.lr) trainerOpts.lr = Number(flags.lr);
+if (flags['warm-start']) trainerOpts.warmStart = 1;
 if (flags['ent-end']) trainerOpts.entEnd = Number(flags['ent-end']);
 if (flags['no-league']) trainerOpts.leaguePool = false;
 if (flags['shaping-runner']) trainerOpts.shapingRunner = Number(flags['shaping-runner']);
