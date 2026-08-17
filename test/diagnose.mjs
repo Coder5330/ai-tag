@@ -63,6 +63,7 @@ const label =
   ` · swap ${JSON.stringify(trainerOpts.swapEvery ?? 8)} · room ${ROOM}]`;
 
 const track = [];
+const h2h = [];
 let seenEp = 0;
 let seenEsc = 0;
 let worst = 1;
@@ -79,6 +80,24 @@ for (let u = 1; u <= UPDATES; u++) {
   seenEp += Math.max(0, trainer.hist.length - before) || 1;
   seenEsc += esc;
   if (u % 120 === 0) track.push(`u${u}:${(esc * 100).toFixed(0)}%`);
+  // The live app shows latest-vs-latest, which is NOT what the training
+  // histogram measures (that is trainee vs league pool). Sample the head-to-head
+  // separately, because it is the number a viewer actually sees.
+  if (u % 60 === 0) {
+    const e2 = new TagEnv(new RNG(1234), ROOM);
+    const ob = new Float32Array(OBS_DIM);
+    const r2 = new RNG(99);
+    let esc2 = 0;
+    for (let k = 0; k < 60; k++) {
+      e2.reset();
+      let res2;
+      do {
+        res2 = playStep(e2, trainer.brains, ob, r2, false);
+      } while (!res2.done);
+      if (!res2.tagged) esc2++;
+    }
+    h2h.push(`u${u}:${Math.round((100 * esc2) / 60)}%`);
+  }
 }
 const meanEsc = seenEsc / UPDATES;
 
@@ -141,6 +160,7 @@ const pct = (a, b) => `${((100 * a) / Math.max(1, b)).toFixed(1)}%`;
 
 console.log(`\n=== ${label} · ${UPDATES} updates ===`);
 console.log(`  escapes over training   ${track.join('  ')}`);
+console.log(`  HEAD-TO-HEAD (what you see) ${h2h.join('  ')}`);
 console.log(
   `  time-averaged escapes   ${(meanEsc * 100).toFixed(1)}%` +
     `   (swing ${(worst * 100).toFixed(0)}% .. ${(best * 100).toFixed(0)}%)`,
