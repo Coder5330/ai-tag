@@ -50,6 +50,8 @@ if (flags['no-jump']) {
 
 const trainerOpts = { roomIndex: ROOM };
 if (flags.seed) trainerOpts.seed = Number(flags.seed);
+if (flags.lr) trainerOpts.lr = Number(flags.lr);
+if (flags['ent-end']) trainerOpts.entEnd = Number(flags['ent-end']);
 if (flags['no-league']) trainerOpts.leaguePool = false;
 if (flags['shaping-runner']) trainerOpts.shapingRunner = Number(flags['shaping-runner']);
 if (flags['swap']) trainerOpts.swapEvery = flags['swap'].split(',').map(Number);
@@ -61,14 +63,24 @@ const label =
   ` · swap ${JSON.stringify(trainerOpts.swapEvery ?? 8)} · room ${ROOM}]`;
 
 const track = [];
+let seenEp = 0;
+let seenEsc = 0;
+let worst = 1;
+let best = 0;
 for (let u = 1; u <= UPDATES; u++) {
+  const before = trainer.hist.length;
   trainer.runUpdate();
-  if (u % 120 === 0) {
-    const h = trainer.hist.slice(-300);
-    const esc = h.filter((e) => !e.tagged).length / Math.max(1, h.length);
-    track.push(`u${u}:${(esc * 100).toFixed(0)}%`);
+  const h = trainer.hist.slice(-300);
+  const esc = h.filter((e) => !e.tagged).length / Math.max(1, h.length);
+  if (u > 60) {
+    worst = Math.min(worst, esc);
+    best = Math.max(best, esc);
   }
+  seenEp += Math.max(0, trainer.hist.length - before) || 1;
+  seenEsc += esc;
+  if (u % 120 === 0) track.push(`u${u}:${(esc * 100).toFixed(0)}%`);
 }
+const meanEsc = seenEsc / UPDATES;
 
 // ---- watch the trained pair play, and count what Albert actually does
 const EPISODES = 300;
@@ -129,6 +141,10 @@ const pct = (a, b) => `${((100 * a) / Math.max(1, b)).toFixed(1)}%`;
 
 console.log(`\n=== ${label} · ${UPDATES} updates ===`);
 console.log(`  escapes over training   ${track.join('  ')}`);
+console.log(
+  `  time-averaged escapes   ${(meanEsc * 100).toFixed(1)}%` +
+    `   (swing ${(worst * 100).toFixed(0)}% .. ${(best * 100).toFixed(0)}%)`,
+);
 console.log(`  tag rate                ${pct(tags, EPISODES)}   (50% = even fight)`);
 console.log(`  Albert escapes          ${pct(EPISODES - tags, EPISODES)}`);
 console.log(`  mean survival           ${(frames / EPISODES / 60).toFixed(2)}s of ${ROUND_S}s`);
