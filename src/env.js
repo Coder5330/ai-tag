@@ -204,6 +204,10 @@ export class TagEnv {
     this.tagged = false;
     this.opponentId = 0;
     this.shaping = opts.shaping || 0;
+    // Scale applied to the runner's half of the shaping term. Chasing pure
+    // distance is good advice for the tagger but bad for the runner: in a
+    // closed room the farthest point from your pursuer is usually a corner.
+    this.shapingRunner = opts.shapingRunner ?? 1;
     this.trail = [[], []];
     this.spawn = [null, null];
     this.grabbedThisEpisode = false;
@@ -313,7 +317,7 @@ export class TagEnv {
       const d1 = Math.hypot(tagger.x - runner.x, tagger.y - runner.y);
       const s = this.shaping * (d0 - d1);
       rTagger += s;
-      rRunner -= s;
+      rRunner -= s * this.shapingRunner;
     }
 
     this._castAll();

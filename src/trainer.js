@@ -36,6 +36,7 @@ export const DEFAULTS = {
   snapshotEvery: 4, // updates between pushing a frozen copy into the pool
   roomIndex: 0,
   shaping: 0.02,
+  shapingRunner: 1,
   seed: 20260816,
 };
 
@@ -82,7 +83,7 @@ export class SelfPlayTrainer {
 
     this.envs = [];
     for (let i = 0; i < cfg.numEnvs; i++) {
-      const e = new TagEnv(new RNG(cfg.seed + 1000 + i), cfg.roomIndex, { shaping: cfg.shaping });
+      const e = new TagEnv(new RNG(cfg.seed + 1000 + i), cfg.roomIndex, { shaping: cfg.shaping, shapingRunner: cfg.shapingRunner });
       e.reset();
       e.opponentId = this.rng.int(cfg.poolSize);
       this.envs.push(e);

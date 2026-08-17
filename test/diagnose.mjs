@@ -50,6 +50,7 @@ if (flags['no-jump']) {
 
 const trainerOpts = { roomIndex: ROOM };
 if (flags['no-league']) trainerOpts.leaguePool = false;
+if (flags['shaping-runner']) trainerOpts.shapingRunner = Number(flags['shaping-runner']);
 if (flags['swap']) trainerOpts.swapEvery = flags['swap'].split(',').map(Number);
 const trainer = new SelfPlayTrainer(trainerOpts);
 const label =
