@@ -39,6 +39,15 @@ export const DEFAULTS = {
   shapingRunner: 1,
   // Supervised warm start for the runner before self-play begins.
   warmStart: 0,
+  // Give the training turn to whichever side is currently losing, instead of
+  // alternating on a fixed schedule. Chasing is the easier job to learn, so
+  // fixed alternation lets the tagger compound a lead until the runner has no
+  // winnable rounds left and stops learning entirely.
+  adaptiveBalance: true,
+  balanceTarget: 0.5, // desired share of rounds ending in a tag
+  balanceBand: 0.08, // leave the schedule alone inside target +/- band
+  balanceEvery: 4, // updates between head-to-head measurements
+  balanceEpisodes: 24,
   seed: 20260816,
 };
 
@@ -98,6 +107,10 @@ export class SelfPlayTrainer {
 
     this.trainee = TAGGER; // Kai gets the first turn, as in the video
     this.sinceSwap = 0;
+    this.h2hTagRate = null; // newest-vs-newest, the rate a viewer actually sees
+    this.h2hEnv = new TagEnv(new RNG(cfg.seed + 7777), cfg.roomIndex, {});
+    this.h2hObs = new Float32Array(OBS_DIM);
+    this.h2hRng = new RNG(cfg.seed + 5150);
     this.snapCount = [0, 0];
     this.updates = 0;
     this.envSteps = 0;
@@ -354,8 +367,32 @@ export class SelfPlayTrainer {
     };
   }
 
+  /**
+   * Play the two newest brains against each other. The training histogram
+   * measures the trainee against the league pool, which can read 60% while
+   * the newest-vs-newest match reads 3% — this is the honest one.
+   */
+  measureHeadToHead(episodes = 24) {
+    const env = this.h2hEnv;
+    let tags = 0;
+    for (let e = 0; e < episodes; e++) {
+      env.reset();
+      let res;
+      do {
+        res = playStep(env, this.brains, this.h2hObs, this.h2hRng, false);
+      } while (!res.done);
+      if (res.tagged) tags++;
+    }
+    this.h2hTagRate = tags / episodes;
+    return this.h2hTagRate;
+  }
+
   /** One full iteration: collect, GAE, optimise, then handle the self-play bookkeeping. */
   runUpdate() {
+    const cfgB = this.cfg;
+    if (cfgB.adaptiveBalance && this.updates > 0 && this.updates % cfgB.balanceEvery === 0) {
+      this.measureHeadToHead(cfgB.balanceEpisodes);
+    }
     const trainee = this.trainee;
     this.collectRollout();
     this.computeGAE();
@@ -365,10 +402,21 @@ export class SelfPlayTrainer {
     if (this.updates % this.cfg.snapshotEvery === 0) this._snapshot(trainee);
     this.sinceSwap++;
     const cfg = this.cfg;
-    const need = Array.isArray(cfg.swapEvery) ? cfg.swapEvery[this.trainee] : cfg.swapEvery;
-    if (this.sinceSwap >= need) {
-      this.trainee = 1 - this.trainee;
-      this.sinceSwap = 0;
+    const r = this.h2hTagRate;
+    if (cfg.adaptiveBalance && r !== null && Math.abs(r - cfg.balanceTarget) > cfg.balanceBand) {
+      // One side is running away with it: hand the turn to the loser and hold
+      // it there until the match comes back inside the band.
+      const loser = r > cfg.balanceTarget ? RUNNER : TAGGER;
+      if (this.trainee !== loser) {
+        this.trainee = loser;
+        this.sinceSwap = 0;
+      }
+    } else {
+      const need = Array.isArray(cfg.swapEvery) ? cfg.swapEvery[this.trainee] : cfg.swapEvery;
+      if (this.sinceSwap >= need) {
+        this.trainee = 1 - this.trainee;
+        this.sinceSwap = 0;
+      }
     }
 
     return { ...this.stats(), ...losses, trainedRole: trainee };
@@ -421,6 +469,7 @@ export class SelfPlayTrainer {
       tagRate: tags / n,
       meanSurvival: frames / n / 60, // seconds
       trainee: this.trainee,
+      h2hTagRate: this.h2hTagRate,
       entCoef: this.entCoef,
       roomIndex: this.cfg.roomIndex,
     };
